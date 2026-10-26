@@ -69,6 +69,67 @@ export async function POST(req: NextRequest) {
       const XLSX = (await import('xlsx')).default
       const wb = XLSX.read(buffer, { type: 'buffer' })
       text = wb.SheetNames.map(s => `# Sheet: ${s}\n${XLSX.utils.sheet_to_csv(wb.Sheets[s])}`).join('\n\n')
+    } else if (mimeType.startsWith('image/')) {
+      // For images: use VLM (Vision Language Model) to both read AND analyze in one step
+      // VLM sees the actual document layout — much more accurate than OCR + text LLM
+      try {
+        const base64Image = `data:${mimeType};base64,${buffer.toString('base64')}`
+        const ZAI = (await import('z-ai-web-dev-sdk')).default
+        const zai = await ZAI.create()
+        
+        const vlmResponse = await zai.chat.completions.createVision({
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a document analysis assistant. Look at this document image and identify what type of document it is (invoice, receipt, purchase order, etc.). Then suggest fields that should be extracted from documents like this.
+
+Return ONLY a JSON array of field objects — no prose, no markdown fences:
+[
+  {
+    "name": "snake_case_name",
+    "label": "Human-friendly label",
+    "type": "string|number|date|currency|email|phone|line_items",
+    "required": true_or_false,
+    "description": "What to look for in the document",
+    "sample": "Example value visible in THIS document if visible, else empty string"
+  }
+]
+
+If the document has line items, include a field of type "line_items" with "subFields" listing the per-line columns.`
+              },
+              { type: 'image_url', image_url: { url: base64Image } }
+            ]
+          }],
+          thinking: { type: 'disabled' },
+        })
+        
+        const vlmText = vlmResponse.choices[0]?.message?.content ?? ''
+        // The VLM response IS the field suggestions — set as text so the LLM adapter parses it
+        // But actually, we can skip the LLM step and parse the VLM output directly
+        const { parseLlmJsonOrArray } = await import('@/lib/extraction/analyse-helpers')
+        const parsed = parseLlmJsonOrArray(vlmText)
+        const suggestedFields = Array.isArray(parsed) ? parsed as FieldDef[] : []
+        
+        await logAudit({
+          ctx,
+          action: 'template.analyse_vlm',
+          metadata: { fileName: file.name, mimeType, vlmUsed: true, suggestedCount: suggestedFields.length },
+        })
+        
+        return NextResponse.json({
+          suggested_fields: suggestedFields,
+          text_length: 0,
+          detected_doc_type: 'image_vlm',
+          vlm_used: true,
+        })
+      } catch (vlmError) {
+        // VLM failed — fall back to OCR + text LLM
+        console.log('[analyse] VLM failed, falling back to OCR:', vlmError instanceof Error ? vlmError.message : 'unknown')
+        const ocr = await runOcrEngines(buffer, mimeType, ['tesseract'])
+        text = ocr[0]?.text ?? ''
+      }
     } else {
       const ocr = await runOcrEngines(buffer, mimeType, ['tesseract'])
       text = ocr[0]?.text ?? ''

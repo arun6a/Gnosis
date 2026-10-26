@@ -67,6 +67,56 @@ export async function POST(req: NextRequest) {
     } else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.toLowerCase().endsWith('.xlsx')) {
       const wb = XLSX.read(buffer, { type: 'buffer' })
       text = wb.SheetNames.map(s => `# Sheet: ${s}\n${XLSX.utils.sheet_to_csv(wb.Sheets[s])}`).join('\n\n')
+    } else if (mimeType.startsWith('image/')) {
+      // VLM: Vision Language Model for image analysis (sees the actual document)
+      try {
+        const base64Image = `data:${mimeType};base64,${buffer.toString('base64')}`
+        const ZAI = (await import('z-ai-web-dev-sdk')).default
+        const zai = await ZAI.create()
+        
+        const vlmResponse = await zai.chat.completions.createVision({
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a document analysis assistant. Look at this document and suggest fields to extract.
+
+Return ONLY a JSON array of field objects:
+[
+  {"name":"snake_case","label":"Label","type":"string|number|date|currency|email|phone|line_items","required":true,"description":"what to look for","sample":"example value"}
+]
+
+Include a "line_items" field with "subFields" if the document has line items.`
+              },
+              { type: 'image_url', image_url: { url: base64Image } }
+            ]
+          }],
+          thinking: { type: 'disabled' },
+        })
+        
+        const vlmText = vlmResponse.choices[0]?.message?.content ?? ''
+        const { parseLlmJsonOrArray } = await import('@/lib/extraction/analyse-helpers')
+        const parsed = parseLlmJsonOrArray(vlmText)
+        const suggestedFields = Array.isArray(parsed) ? parsed as FieldDef[] : []
+        
+        await logAudit({
+          ctx,
+          action: 'template.analyse_vlm_api',
+          metadata: { fileName: file.name, vlmUsed: true, suggestedCount: suggestedFields.length },
+        })
+        
+        return NextResponse.json({
+          suggested_fields: suggestedFields,
+          text_length: 0,
+          detected_doc_type: 'image_vlm',
+          vlm_used: true,
+        })
+      } catch (vlmError) {
+        console.log('[v1/analyse] VLM failed, falling back to OCR:', vlmError instanceof Error ? vlmError.message : 'unknown')
+        const ocr = await runOcrEngines(buffer, mimeType, ['tesseract'])
+        text = ocr[0]?.text ?? ''
+      }
     } else {
       const ocr = await runOcrEngines(buffer, mimeType, ['tesseract'])
       text = ocr[0]?.text ?? ''
