@@ -243,7 +243,10 @@ export function parseLlmJson(raw: string): Record<string, unknown> {
 
 // ───────────────────────────────────────────────────────────────────────────
 
-let activeAdapter: LlmAdapter = new ZaiLlmAdapter()
+// Auto-detect: use OpenAI if OPENAI_API_KEY is set, otherwise Z.ai
+let activeAdapter: LlmAdapter = process.env.OPENAI_API_KEY ? new OpenAiLlmAdapter(process.env.OPENAI_API_KEY) : new ZaiLlmAdapter()
+if (process.env.OPENAI_API_KEY) console.log("[llm] Using OpenAI gpt-4o-mini")
+else console.log("[llm] Using Z.ai LLM (set OPENAI_API_KEY for production)")
 
 export function getLlmAdapter(): LlmAdapter {
   return activeAdapter
