@@ -9,7 +9,6 @@ WORKDIR /app
 RUN npm install -g bun
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Explicitly copy the schema to bust cache if only schema changed
 COPY prisma/schema.prisma prisma/schema.prisma
 RUN bun run db:generate
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -34,4 +33,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node server.js"]
+CMD ["sh", "-c", "node ./node_modules/prisma/build/index.js db push --accept-data-loss && node server.js"]
