@@ -305,6 +305,7 @@ Rules:
     for (const modelToUse of modelsToTry) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          signal: AbortSignal.timeout(8000),  // 8s timeout per model
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
