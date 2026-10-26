@@ -254,7 +254,18 @@ export class OpenRouterLlmAdapter implements LlmAdapter {
   private apiKey: string
   private model: string
 
-  constructor(apiKey: string, model: string = 'nvidia/nemotron-3.5-super-vl:free') {
+  // List of free models to try in order (some get removed by OpenRouter over time)
+  private static FREE_MODELS = [
+    'nvidia/nemotron-3.5-super-vl:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'deepseek/deepseek-chat',
+    'qwen/qwen-2.5-72b-instruct:free',
+  ]
+
+  constructor(apiKey: string, model?: string) {
+    this.apiKey = apiKey
+    this.model = model || OpenRouterLlmAdapter.FREE_MODELS[0]
     this.apiKey = apiKey
     this.model = model
   }
@@ -285,7 +296,15 @@ Rules:
 - Do NOT include any field that is not in the schema above.
 - ALSO include a special key "_confidence" with values 0.0–1.0 for each extracted field.`
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    // Try the primary model, then fallback to other free models if it fails
+    const modelsToTry = process.env.OPENROUTER_MODEL 
+      ? [this.model]  // user specified a single model, don't fallback
+      : [this.model, ...OpenRouterLlmAdapter.FREE_MODELS.filter(m => m !== this.model)]
+    
+    let lastError = ''
+    for (const modelToUse of modelsToTry) {
+      try:
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
@@ -309,17 +328,24 @@ Rules:
     }
 
     const json = await response.json()
-    const rawResponse = json.choices[0]?.message?.content ?? ''
-    const data = parseLlmJson(rawResponse)
+        const rawResponse = json.choices[0]?.message?.content ?? ''
+        const data = parseLlmJson(rawResponse)
 
-    return {
-      data,
-      rawResponse,
-      model: this.model,
-      timeMs: Date.now() - start,
-      tokensIn: json.usage?.prompt_tokens ?? 0,
-      tokensOut: json.usage?.completion_tokens ?? 0,
+        return {
+          data,
+          rawResponse,
+          model: modelToUse,
+          timeMs: Date.now() - start,
+          tokensIn: json.usage?.prompt_tokens ?? 0,
+          tokensOut: json.usage?.completion_tokens ?? 0,
+        }
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Unknown error'
+        console.log(`[openrouter] Model ${modelToUse} failed: ${lastError}, trying next...`)
+        continue
+      }
     }
+    throw new Error(`All OpenRouter models failed. Last error: ${lastError}`)
   }
 }
 
