@@ -243,10 +243,101 @@ export function parseLlmJson(raw: string): Record<string, unknown> {
 
 // ───────────────────────────────────────────────────────────────────────────
 
-// Auto-detect: use OpenAI if OPENAI_API_KEY is set, otherwise Z.ai
-let activeAdapter: LlmAdapter = process.env.OPENAI_API_KEY ? new OpenAiLlmAdapter(process.env.OPENAI_API_KEY) : new ZaiLlmAdapter()
-if (process.env.OPENAI_API_KEY) console.log("[llm] Using OpenAI gpt-4o-mini")
-else console.log("[llm] Using Z.ai LLM (set OPENAI_API_KEY for production)")
+
+// ─── OpenRouter adapter ─────────────────────────────────────────────────────
+// OpenRouter provides access to many LLMs (including free ones) via one API.
+// Get a free key at https://openrouter.ai/keys
+// Free models: google/gemini-2.0-flash-exp:free, meta-llama/llama-3.3-70b-instruct:free
+
+export class OpenRouterLlmAdapter implements LlmAdapter {
+  readonly provider = 'openrouter'
+  private apiKey: string
+  private model: string
+
+  constructor(apiKey: string, model: string = 'google/gemini-2.0-flash-exp:free') {
+    this.apiKey = apiKey
+    this.model = model
+  }
+
+  async extract(text: string, template: TemplateDef): Promise<ExtractionResult> {
+    const start = Date.now()
+    const schema = templateToJsonSchema(template)
+    const fieldList = template.fields.map(f =>
+      `- ${f.name} (${f.type}${f.required ? ', required' : ', optional'}): ${f.description ?? '(no description)'}${f.sample ? ` [e.g. ${f.sample}]` : ''}`
+    ).join('\n')
+
+    const systemPrompt = `You are a document extraction engine. Extract structured fields from the given document text according to the template below.
+
+Template: ${template.name}
+Instructions: ${template.instructions ?? '(none)'}
+Fields to extract:
+${fieldList}
+
+Return ONLY valid JSON — no prose, no markdown fences, no commentary. The JSON must match this exact schema:
+
+${JSON.stringify(schema, null, 2)}
+
+Rules:
+- Use null for any field not present in the document.
+- For currency/number fields, return plain numbers (no $ or currency symbol).
+- For date fields, return ISO 8601 (YYYY-MM-DD).
+- For line_items, return an array of objects, one per line item in the document.
+- Do NOT include any field that is not in the schema above.
+- ALSO include a special key "_confidence" with values 0.0–1.0 for each extracted field.`
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://gnosis.up.railway.app',
+        'X-Title': 'Gnosis Document Extraction',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Document text:\n\n${text}` },
+        ],
+        temperature: 0,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`OpenRouter API ${response.status}: ${errorText}`)
+    }
+
+    const json = await response.json()
+    const rawResponse = json.choices[0]?.message?.content ?? ''
+    const data = parseLlmJson(rawResponse)
+
+    return {
+      data,
+      rawResponse,
+      model: this.model,
+      timeMs: Date.now() - start,
+      tokensIn: json.usage?.prompt_tokens ?? 0,
+      tokensOut: json.usage?.completion_tokens ?? 0,
+    }
+  }
+}
+
+// Auto-detect LLM provider based on environment variables
+// Priority: OPENROUTER_API_KEY > OPENAI_API_KEY > Z.ai (sandbox only)
+let activeAdapter: LlmAdapter
+
+if (process.env.OPENROUTER_API_KEY) {
+  const model = process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free"
+  console.log("[llm] Using OpenRouter (" + model + ")")
+  activeAdapter = new OpenRouterLlmAdapter(process.env.OPENROUTER_API_KEY, model)
+} else if (process.env.OPENAI_API_KEY) {
+  console.log("[llm] Using OpenAI gpt-4o-mini")
+  activeAdapter = new OpenAiLlmAdapter(process.env.OPENAI_API_KEY)
+} else {
+  console.log("[llm] Using Z.ai LLM (set OPENROUTER_API_KEY or OPENAI_API_KEY for production)")
+  activeAdapter = new ZaiLlmAdapter()
+}
 
 export function getLlmAdapter(): LlmAdapter {
   return activeAdapter
