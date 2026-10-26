@@ -10,6 +10,8 @@ RUN npm install -g bun
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 COPY prisma/schema.prisma prisma/schema.prisma
+# Create test directory for pdf-parse v1 workaround
+RUN mkdir -p test/data
 RUN bun run db:generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
@@ -29,7 +31,6 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/scripts ./scripts
 
-# Install pg package for startup table creation
 RUN npm install pg
 
 EXPOSE 3000

@@ -1,9 +1,8 @@
 /**
- * PDF text extraction using pdf-parse v1 (lazy-loaded to avoid build-time test file issue).
+ * PDF text extraction — tries pdf-parse first, falls back to empty (triggers OCR).
  *
- * pdf-parse v1 has a known issue: it tries to read ./test/data/05-versions-space.pdf
- * during require(). By lazy-loading (only requiring when extractPdfText is called),
- * we avoid this during the Next.js build phase.
+ * If pdf-parse fails (common in Docker/Alpine environments), returns empty text
+ * which triggers the Tesseract OCR fallback path in the worker.
  */
 
 export type PdfExtractResult = {
@@ -11,15 +10,30 @@ export type PdfExtractResult = {
   page_count: number
   text_length: number
   time_ms: number
-  /** True if PDF has essentially no native text → needs OCR. */
   is_scanned: boolean
 }
 
 export async function extractPdfText(buffer: Buffer): Promise<PdfExtractResult> {
   const start = Date.now()
   try {
-    // Lazy-load pdf-parse only when actually called (not during build)
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Try pdf-parse with a workaround for the test file issue
+    // pdf-parse v1 checks for ./test/data/05-versions-space.pdf on require
+    // We create a minimal mock to bypass this
+    const fs = require('fs')
+    const path = require('path')
+    
+    // Create the test directory if it doesn't exist (pdf-parse looks for it)
+    const testDir = path.join(process.cwd(), 'test', 'data')
+    if (!fs.existsSync(testDir)) {
+      fs.mkdirSync(testDir, { recursive: true })
+    }
+    const testFile = path.join(testDir, '05-versions-space.pdf')
+    if (!fs.existsSync(testFile)) {
+      // Create a minimal valid PDF file
+      fs.writeFileSync(testFile, Buffer.from('JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhYXRhbG9nL1BhZ2VzIDIgMCBSPj4KZW5kb2JqCjIgMCBvYmoKPDwvVHlwZS9QYWdlcy9Db3VudCAwPj4KZW5kb2JqCnN0YXJ0eHJlZgowCiUlRU9G', 'base64'))
+    }
+
+    // Now require pdf-parse (it will find the test file)
     const pdfParse = require('pdf-parse')
     const result = await pdfParse(buffer, { max: 0 })
     const text = (result?.text ?? '').trim()
@@ -34,13 +48,13 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfExtractResult> 
       is_scanned,
     }
   } catch (e) {
-    console.error('[pdf] extraction failed:', e instanceof Error ? e.message : 'unknown')
+    console.error('[pdf] extraction failed, will use OCR fallback:', e instanceof Error ? e.message : 'unknown')
     return {
       text: '',
       page_count: 1,
       text_length: 0,
       time_ms: Date.now() - start,
-      is_scanned: true,
+      is_scanned: true, // trigger OCR fallback
     }
   }
 }
