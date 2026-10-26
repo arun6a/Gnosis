@@ -1,14 +1,10 @@
 /**
- * PDF text extraction using pdf-parse v1 — pure-JS, no worker, no Iterator issue.
+ * PDF text extraction using pdf-parse v1 (lazy-loaded to avoid build-time test file issue).
  *
- * Per BRD §5.2: "Inspect PDF text quality; use native parsing when text is
- * usable and OCR when pages are scanned."
- *
- * For MVP, "text is usable" = total extracted text length > 50 chars.
+ * pdf-parse v1 has a known issue: it tries to read ./test/data/05-versions-space.pdf
+ * during require(). By lazy-loading (only requiring when extractPdfText is called),
+ * we avoid this during the Next.js build phase.
  */
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require('pdf-parse')
 
 export type PdfExtractResult = {
   text: string
@@ -22,6 +18,9 @@ export type PdfExtractResult = {
 export async function extractPdfText(buffer: Buffer): Promise<PdfExtractResult> {
   const start = Date.now()
   try {
+    // Lazy-load pdf-parse only when actually called (not during build)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse = require('pdf-parse')
     const result = await pdfParse(buffer, { max: 0 })
     const text = (result?.text ?? '').trim()
     const text_length = text.length
@@ -35,14 +34,13 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfExtractResult> 
       is_scanned,
     }
   } catch (e) {
-    // If pdf-parse fails, return empty (will trigger OCR fallback)
     console.error('[pdf] extraction failed:', e instanceof Error ? e.message : 'unknown')
     return {
       text: '',
       page_count: 1,
       text_length: 0,
       time_ms: Date.now() - start,
-      is_scanned: true, // trigger OCR fallback
+      is_scanned: true,
     }
   }
 }
