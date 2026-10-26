@@ -1,16 +1,5 @@
-# Gnosis PostgreSQL Prisma schema
-# Use this when deploying to Google Cloud SQL (or any PostgreSQL provider).
-#
-# To switch:
-#   1. Set DATABASE_URL=postgresql://... in .env
-#   2. Replace prisma/schema.prisma with this file:
-#        cp prisma/schema.postgres.prisma prisma/schema.prisma
-#   3. Run: bun run db:push  (creates tables in PostgreSQL)
-#   4. Run: bun run scripts/seed-default-org.ts  (seeds default org + admin)
-#
-# The schema is identical to schema.prisma (SQLite) except:
-#   - datasource provider = "postgresql" instead of "sqlite"
-#   - no other changes needed (Prisma handles the SQL dialect differences)
+// Gnosis PostgreSQL Prisma schema
+// Provider: postgresql (for Railway/Cloud SQL/any PostgreSQL)
 
 generator client {
   provider = "prisma-client-js"
