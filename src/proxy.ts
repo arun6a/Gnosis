@@ -13,7 +13,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   // Generate request ID for tracing
   const requestId = req.headers.get('x-request-id') ?? crypto.randomUUID()
   const res = NextResponse.next()

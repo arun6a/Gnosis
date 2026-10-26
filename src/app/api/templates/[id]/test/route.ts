@@ -125,7 +125,7 @@ export async function POST(
 
     // Multi-invoice detect
     const chunks = await splitMultiInvoiceText(text)
-    const multi = chunks.length > 1 || (chunks.length === 1 && chunks[0].marker !== '(single)'))
+    const multi = chunks.length > 1 || (chunks.length === 1 && chunks[0].marker !== '(single)')
 
     // Extract per chunk
     const llm = getLlmAdapter()
