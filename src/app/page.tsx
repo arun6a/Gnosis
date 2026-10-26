@@ -202,6 +202,9 @@ function LoginPage() {
               }
             </Button>
           </form>
+          <p className="text-xs text-muted-foreground mt-4 text-center">
+            Demo: <code className="text-foreground">admin@gnosis.local</code> / <code className="text-foreground">gnosis123</code>
+          </p>
 
         </CardContent>
       </Card>
