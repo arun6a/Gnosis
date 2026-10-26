@@ -14,8 +14,11 @@ import { db } from '@/lib/db'
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
   pages: {
-    signIn: '/login',
+    signIn: '/',
   },
+  // Use the request origin as the URL — fixes custom domain redirects
+  // If NEXTAUTH_URL is set, it's used as fallback
+  url: process.env.NEXTAUTH_URL ?? undefined,
   providers: [
     CredentialsProvider({
       name: 'Credentials',

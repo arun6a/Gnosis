@@ -75,8 +75,8 @@ export default function Home() {
 function LoginPage() {
   const { toast } = useToast()
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [email, setEmail] = useState('admin@gnosis.local')
-  const [password, setPassword] = useState('gnosis123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [orgName, setOrgName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -202,11 +202,7 @@ function LoginPage() {
               }
             </Button>
           </form>
-          {mode === 'signin' && (
-            <p className="text-xs text-muted-foreground mt-4 text-center">
-              Demo credentials are pre-filled: <code className="text-foreground">admin@gnosis.local</code> / <code className="text-foreground">gnosis123</code>
-            </p>
-          )}
+
         </CardContent>
       </Card>
     </div>
@@ -398,7 +394,7 @@ function AuthenticatedApp(props: AuthenticatedAppProps) {
               <UserIcon className="h-3.5 w-3.5" />
               <span>{session?.user?.email}</span>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/' })}>
+            <Button variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: window.location.origin + '/' })}>
               <LogOut className="h-3.5 w-3.5 mr-1.5" />Sign out
             </Button>
           </div>
