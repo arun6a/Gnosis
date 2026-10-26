@@ -247,14 +247,14 @@ export function parseLlmJson(raw: string): Record<string, unknown> {
 // ─── OpenRouter adapter ─────────────────────────────────────────────────────
 // OpenRouter provides access to many LLMs (including free ones) via one API.
 // Get a free key at https://openrouter.ai/keys
-// Free models: google/gemini-2.0-flash-exp:free, meta-llama/llama-3.3-70b-instruct:free
+// Free models: deepseek/deepseek-chat:free, meta-llama/llama-3.3-70b-instruct:free
 
 export class OpenRouterLlmAdapter implements LlmAdapter {
   readonly provider = 'openrouter'
   private apiKey: string
   private model: string
 
-  constructor(apiKey: string, model: string = 'google/gemini-2.0-flash-exp:free') {
+  constructor(apiKey: string, model: string = 'deepseek/deepseek-chat:free') {
     this.apiKey = apiKey
     this.model = model
   }
@@ -328,7 +328,7 @@ Rules:
 let activeAdapter: LlmAdapter
 
 if (process.env.OPENROUTER_API_KEY) {
-  const model = process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free"
+  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat:free"
   console.log("[llm] Using OpenRouter (" + model + ")")
   activeAdapter = new OpenRouterLlmAdapter(process.env.OPENROUTER_API_KEY, model)
 } else if (process.env.OPENAI_API_KEY) {
