@@ -1,0 +1,54 @@
+# docker-compose.yml — Gnosis local development with PostgreSQL
+#
+# Run:
+#   docker compose up -d
+#
+# This sets up:
+#   - PostgreSQL 16 (managed DB, like Cloud SQL in production)
+#   - Gnosis app on port 3000
+#
+# For production, deploy the app to Google Cloud Run + use Cloud SQL instead.
+# See docs/DEPLOYMENT.md for production deployment instructions.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gnosis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gnosis
+      POSTGRES_PASSWORD: gnosis_dev_password
+      POSTGRES_DB: gnosis
+    ports:
+      - "5432:5432"
+    volumes:
+      - gnosis_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gnosis"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gnosis-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Connect to the postgres service defined above
+      DATABASE_URL: "postgresql://gnosis:gnosis_dev_password@postgres:5432/gnosis?schema=public"
+      # Generate with: openssl rand -base64 32
+      NEXTAUTH_SECRET: "change-me-in-production-use-openssl-rand-base64-32"
+      NEXTAUTH_URL: "http://localhost:3000"
+      # LLM provider — Z.ai (free preview) OR OpenAI (production)
+      # OPENAI_API_KEY: "sk-..."
+      # ZAI_API_KEY: ""  # optional — Z.ai SDK works without a key in this env
+    ports:
+      - "3000:3000"
+
+volumes:
+  gnosis_pgdata:
