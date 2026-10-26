@@ -80,35 +80,35 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const zai = (await import('z-ai-web-dev-sdk')).default
-    const z = await zai.create()
+    // Use the same LLM adapter as the extraction worker (OpenRouter/OpenAI/Z.ai)
+    const { getLlmAdapter } = await import('@/lib/extraction/extractor')
+    const llm = getLlmAdapter()
 
-    const systemPrompt = `You are a document analysis assistant. The user has uploaded a sample ${mimeType === 'application/pdf' ? 'PDF' : mimeType.includes('image') ? 'image' : 'document'} and wants to know what fields they should extract from documents like this.
+    const systemPrompt = `You are a document analysis assistant. Inspect the document text and propose a list of fields. Return ONLY a JSON array of field objects — no prose, no markdown fences.`
 
-Inspect the document text below and propose a list of fields. For each field, return:
-  {
-    "name": "snake_case_name",
-    "label": "Human-friendly label",
-    "type": "string" | "number" | "date" | "currency" | "email" | "phone" | "line_items",
-    "required": true | false,
-    "description": "What to look for in the document",
-    "sample": "Example value from THIS document if visible, else empty string"
-  }
-
-If the document contains line items (e.g. an invoice), include a field of type "line_items"
-with a "subFields" array listing the per-line columns (e.g. description, quantity, unit_price, line_total).
-
-Return ONLY a JSON array of field objects — no markdown fences, no commentary.`
-
-    const completion = await z.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Document text:\n\n${text}` },
-      ],
-      thinking: { type: 'disabled' },
+    const extraction = await llm.extract(text, {
+      id: 'analyse',
+      name: 'Field Analysis',
+      documentType: 'unknown',
+      fields: [{
+        name: 'fields',
+        label: 'Suggested Fields',
+        type: 'line_items',
+        required: true,
+        description: 'Array of suggested field definitions',
+        subFields: [
+          { name: 'name', label: 'Field Name', type: 'string', required: true, description: 'snake_case name' },
+          { name: 'label', label: 'Label', type: 'string', required: true, description: 'Human-friendly label' },
+          { name: 'type', label: 'Type', type: 'string', required: true, description: 'Field type' },
+          { name: 'required', label: 'Required', type: 'string', required: false, description: 'true or false' },
+          { name: 'description', label: 'Description', type: 'string', required: false, description: 'What to look for' },
+          { name: 'sample', label: 'Sample', type: 'string', required: false, description: 'Example value' },
+        ],
+      }],
+      instructions: systemPrompt,
     })
 
-    const raw = completion.choices[0]?.message?.content ?? ''
+    const raw = extraction.rawResponse
     const parsed = parseLlmJsonOrArray(raw)
     const suggestedFields = Array.isArray(parsed) ? parsed as FieldDef[] : []
 
