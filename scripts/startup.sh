@@ -10,8 +10,9 @@ if (!dbUrl) { console.error('DATABASE_URL not set'); process.exit(1); }
 
 // Parse DATABASE_URL to extract connection info
 // Format: postgresql://user:pass@host:port/db?schema=public
-const match = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
-if (!match) { console.error('Invalid DATABASE_URL format'); process.exit(1); }
+// (Fly Postgres uses the short form postgres:// — both must match.)
+const match = dbUrl.match(/postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
+if (!match) { console.error('Invalid DATABASE_URL format: ' + dbUrl); process.exit(1); }
 const [, user, pass, host, port, dbname] = match;
 
 const { Client } = require('pg');
